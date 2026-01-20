@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>全能格式转换工具-JunJianxin</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/themes.css" />
+  </head>
+  <body class="light-theme">
+    <header>
+      <button class="hamburger" id="hamburgerBtn" aria-label="展开菜单">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 id="mainTitle">全能格式转换工具</h1>
+      <span
+        id="mobileSidebarTitle"
+        class="mobile-sidebar-title"
+        style="display: none"
+        >全能格式转换工具</span
+      >
+      <div class="theme-toggle">
+        <button id="themeToggle" aria-label="切换主题">
+          <span class="light-icon">☀️</span>
+          <span class="dark-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="container">
+      <aside class="sidebar" id="sidebar">
+        <!-- 搜索框移到顶部 -->
+        <div class="tool-search">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="toolSearch" placeholder="搜索工具... (Ctrl+K)" />
+        </div>
+        
+        <nav class="nav-container">
+          <!-- 分类：编解码 -->
+          <div class="nav-category">
+            <div class="category-title">编解码</div>
+            <ul class="nav-menu">
+              <li class="nav-item active" data-tool="json">
+                <span class="icon">{ }</span>
+                <span class="text">JSON格式化</span>
+              </li>
+              <li class="nav-item" data-tool="base64">
+                <span class="icon">64</span>
+                <span class="text">Base64编解码</span>
+              </li>
+              <li class="nav-item" data-tool="url">
+                <span class="icon">🔗</span>
+                <span class="text">URL编解码</span>
+              </li>
+              <li class="nav-item" data-tool="unicode">
+                <span class="icon">\u</span>
+                <span class="text">Unicode转义</span>
+              </li>
+              <li class="nav-item" data-tool="hex">
+                <span class="icon">0x</span>
+                <span class="text">Hex编解码</span>
+              </li>
+              <li class="nav-item" data-tool="jwt">
+                <span class="icon">🎫</span>
+                <span class="text">JWT解码</span>
+              </li>
+              <li class="nav-item" data-tool="htmlencode">
+                <span class="icon">&amp;</span>
+                <span class="text">HTML编码</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：加解密 -->
+          <div class="nav-category">
+            <div class="category-title">加解密</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="md5">
+                <span class="icon">#</span>
+                <span class="text">MD5加密</span>
+              </li>
+              <li class="nav-item" data-tool="hash">
+                <span class="icon">#</span>
+                <span class="text">SHA/HMAC</span>
+              </li>
+              <li class="nav-item" data-tool="symmetric">
+                <span class="icon">🔐</span>
+                <span class="text">AES/DES加密</span>
+              </li>
+              <li class="nav-item" data-tool="rsa">
+                <span class="icon">🔑</span>
+                <span class="text">RSA非对称</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：格式化 -->
+          <div class="nav-category">
+            <div class="category-title">格式化</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="html">
+                <span class="icon">&lt;&gt;</span>
+                <span class="text">HTML格式化</span>
+              </li>
+              <li class="nav-item" data-tool="xml">
+                <span class="icon">&lt;/&gt;</span>
+                <span class="text">XML格式化</span>
+              </li>
+              <li class="nav-item" data-tool="sql">
+                <span class="icon">📝</span>
+                <span class="text">SQL格式化</span>
+              </li>
+              <li class="nav-item" data-tool="jsmin">
+                <span class="icon">JS</span>
+                <span class="text">JS压缩</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：转换 -->
+          <div class="nav-category">
+            <div class="category-title">转换</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="timestamp">
+                <span class="icon">🕒</span>
+                <span class="text">时间戳转换</span>
+              </li>
+              <li class="nav-item" data-tool="radix">
+                <span class="icon">2⁸</span>
+                <span class="text">进制转换</span>
+              </li>
+              <li class="nav-item" data-tool="csv">
+                <span class="icon">📊</span>
+                <span class="text">CSV转JSON</span>
+              </li>
+              <li class="nav-item" data-tool="ascii">
+                <span class="icon">A</span>
+                <span class="text">ASCII转换</span>
+              </li>
+              <li class="nav-item" data-tool="varname">
+                <span class="icon">aA</span>
+                <span class="text">变量名转换</span>
+              </li>
+              <li class="nav-item" data-tool="curl2py">
+                <span class="icon">🐍</span>
+                <span class="text">cURL转Python</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：爬虫工具 -->
+          <div class="nav-category">
+            <div class="category-title">爬虫工具</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="cookie">
+                <span class="icon">🍪</span>
+                <span class="text">Cookie解析</span>
+              </li>
+              <li class="nav-item" data-tool="headers">
+                <span class="icon">📋</span>
+                <span class="text">Headers解析</span>
+              </li>
+              <li class="nav-item" data-tool="regex">
+                <span class="icon">.*</span>
+                <span class="text">正则测试</span>
+              </li>
+              <li class="nav-item" data-tool="jsonpath">
+                <span class="icon">$.</span>
+                <span class="text">JSON Path</span>
+              </li>
+              <li class="nav-item" data-tool="deobfuscate">
+                <span class="icon">🔓</span>
+                <span class="text">代码反混淆</span>
+              </li>
+              <li class="nav-item" data-tool="htmlrender">
+                <span class="icon">👁</span>
+                <span class="text">HTML渲染</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：生成工具 -->
+          <div class="nav-category">
+            <div class="category-title">生成工具</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="uuid">
+                <span class="icon">🆔</span>
+                <span class="text">UUID生成</span>
+              </li>
+              <li class="nav-item" data-tool="random">
+                <span class="icon">🎲</span>
+                <span class="text">随机字符串</span>
+              </li>
+              <li class="nav-item" data-tool="qrcode">
+                <span class="icon">▣</span>
+                <span class="text">二维码生成</span>
+              </li>
+              <li class="nav-item" data-tool="base64img">
+                <span class="icon">🖼️</span>
+                <span class="text">Base64转图片</span>
+              </li>
+            </ul>
+          </div>
+          
+          <!-- 分类：其他工具 -->
+          <div class="nav-category">
+            <div class="category-title">其他工具</div>
+            <ul class="nav-menu">
+              <li class="nav-item" data-tool="textdiff">
+                <span class="icon">⇄</span>
+                <span class="text">文本比对</span>
+              </li>
+              <li class="nav-item" data-tool="crontab">
+                <span class="icon">⏰</span>
+                <span class="text">Crontab解析</span>
+              </li>
+            </ul>
+          </div>
+        </nav>
+
+        <div class="history-panel">
+          <div class="history-header">
+            <span class="history-title">📜 历史记录</span>
+            <button id="clearHistoryBtn" class="clear-btn" title="清空历史记录">
+              <span>清空</span>
+            </button>
+          </div>
+          <ul id="historyList" class="history-list">
+            <!-- 历史记录将在这里动态生成 -->
+          </ul>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div class="tool-header">
+          <h2 id="currentToolTitle">JSON格式化</h2>
+          <div class="tool-options" id="toolOptions">
+            <!-- 工具特定选项将在这里动态生成 -->
+          </div>
+        </div>
+
+        <div class="converter">
+          <div class="input-panel">
+            <div class="panel-header">
+              <h3>输入</h3>
+              <div class="stats" id="inputStats">0 字符 | 0 行</div>
+            </div>
+            <div class="textarea-container">
+              <textarea
+                id="inputText"
+                placeholder="请在此输入内容..."
+              ></textarea>
+              <div class="file-drop-area" id="fileDropArea">
+                <p>拖拽文件到此处</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="convertBtn" class="btn primary" title="Ctrl+Enter">转换</button>
+            <button id="swapBtn" class="btn" title="交换输入输出">⇅ 交换</button>
+            <button id="clearBtn" class="btn">清除</button>
+            <button id="copyBtn" class="btn">复制结果</button>
+            <button id="downloadBtn" class="btn" title="下载结果">📥 下载</button>
+          </div>
+
+          <div class="output-panel">
+            <div class="panel-header">
+              <h3>输出</h3>
+              <div class="stats" id="outputStats">0 字符 | 0 行</div>
+            </div>
+            <div class="textarea-container">
+              <textarea id="outputText" readonly></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div id="notification" class="notification">
+          <!-- 通知消息将在这里显示 -->
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        2025 全能格式转换工具 - © 版权归 <i><b>JunJianxin </b></i>所有
+      </p>
+    </footer>
+    <!--  新增功能  -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.3.2/jsencrypt.min.js"></script>
+
+    <script src="js/main.js"></script>
+    <script src="js/tools.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/MD5.js"></script>
+  </body>
+</html>
