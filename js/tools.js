@@ -1435,13 +1435,14 @@ function parseCurlCommand(curlStr) {
         url: '',
         headers: {},
         data: null,
-        cookies: {}
+        cookies: {},
+        isJson: false
     };
     
-    // 清理输入
-    curlStr = curlStr.replace(/\\\n/g, ' ').replace(/\s+/g, ' ').trim();
+    // 清理输入 - 保留换行符以便更好地解析多行数据
+    curlStr = curlStr.replace(/\\\n/g, '\n').trim();
     
-    // 提取URL
+    // 提取URL - 改进正则以更好地匹配URL
     const urlMatch = curlStr.match(/curl\s+['"]?([^'">\s]+)['"]?/) || 
                      curlStr.match(/['"]?(https?:\/\/[^'">\s]+)['"]?/);
     if (urlMatch) {
@@ -1454,29 +1455,83 @@ function parseCurlCommand(curlStr) {
         result.method = methodMatch[1].toUpperCase();
     }
     
-    // 提取Headers
-    const headerRegex = /-H\s+['"]([^'"]+)['"]/gi;
+    // 提取Headers - 改进正则以处理嵌套引号
+    // 匹配 -H 'key: value' 或 -H "key: value"，正确处理值中的引号
+    const headerRegex = /-H\s+(['"])((?:(?!\1).|\\\1)*?)\1/gi;
     let headerMatch;
     while ((headerMatch = headerRegex.exec(curlStr)) !== null) {
-        const [key, ...valueParts] = headerMatch[1].split(':');
-        const value = valueParts.join(':').trim();
-        if (key.toLowerCase() === 'cookie') {
-            // 解析Cookie
-            value.split(';').forEach(c => {
-                const [k, v] = c.trim().split('=');
-                if (k) result.cookies[k] = v || '';
-            });
-        } else {
-            result.headers[key.trim()] = value;
+        const headerValue = headerMatch[2].replace(/\\'/g, "'").replace(/\\"/g, '"');
+        const colonIndex = headerValue.indexOf(':');
+        if (colonIndex > 0) {
+            const key = headerValue.substring(0, colonIndex).trim();
+            const value = headerValue.substring(colonIndex + 1).trim();
+            if (key.toLowerCase() === 'cookie') {
+                // 解析Cookie
+                value.split(';').forEach(c => {
+                    const [k, v] = c.trim().split('=');
+                    if (k) result.cookies[k] = v || '';
+                });
+            } else {
+                result.headers[key] = value;
+            }
         }
     }
     
-    // 提取数据
-    const dataMatch = curlStr.match(/(?:-d|--data|--data-raw|--data-binary)\s+['"]([^'"]+)['"]/i);
-    if (dataMatch) {
-        result.data = dataMatch[1];
-        if (result.method === 'GET') {
-            result.method = 'POST';
+    // 提取数据 - 改进正则以正确处理包含引号的JSON数据
+    // 使用更智能的方法：找到数据参数后，提取引号内的所有内容
+    const dataParamRegex = /(?:-d|--data|--data-raw|--data-binary)\s+/i;
+    const dataParamMatch = curlStr.search(dataParamRegex);
+    
+    if (dataParamMatch !== -1) {
+        // 找到数据参数的开始位置
+        const afterParam = curlStr.substring(dataParamMatch).replace(/(?:-d|--data|--data-raw|--data-binary)\s+/i, '');
+        
+        // 检查是否以引号开始
+        if (afterParam.startsWith("'")) {
+            // 单引号包裹：找到匹配的结束单引号（考虑转义）
+            let endQuote = -1;
+            for (let i = 1; i < afterParam.length; i++) {
+                if (afterParam[i] === "'" && (i === 1 || afterParam[i-1] !== '\\')) {
+                    endQuote = i;
+                    break;
+                }
+            }
+            if (endQuote > 0) {
+                result.data = afterParam.substring(1, endQuote);
+            }
+        } else if (afterParam.startsWith('"')) {
+            // 双引号包裹：找到匹配的结束双引号（考虑转义）
+            let endQuote = -1;
+            for (let i = 1; i < afterParam.length; i++) {
+                if (afterParam[i] === '"' && (i === 1 || afterParam[i-1] !== '\\')) {
+                    endQuote = i;
+                    break;
+                }
+            }
+            if (endQuote > 0) {
+                result.data = afterParam.substring(1, endQuote);
+            }
+        } else {
+            // 没有引号：提取到下一个空格或行尾
+            const spaceIndex = afterParam.search(/\s/);
+            if (spaceIndex > 0) {
+                result.data = afterParam.substring(0, spaceIndex);
+            } else {
+                result.data = afterParam.trim();
+            }
+        }
+        
+        // 如果提取到数据，检查是否为JSON并设置方法
+        if (result.data) {
+            try {
+                JSON.parse(result.data);
+                result.isJson = true;
+            } catch (e) {
+                result.isJson = false;
+            }
+            if (result.method === 'GET') {
+                result.method = 'POST';
+            }
         }
     }
     
@@ -1485,48 +1540,89 @@ function parseCurlCommand(curlStr) {
 
 // 生成requests代码
 function generateRequestsCode(curl) {
-    let code = `import requests\n\n`;
+    let code = `import requests\n`;
+    let needJson = false;
+    
+    // 检查是否需要导入json模块
+    if (curl.data && curl.isJson) {
+        code += `import json\n`;
+        needJson = true;
+    }
+    code += `\n`;
     
     code += `url = "${curl.url}"\n\n`;
     
     if (Object.keys(curl.headers).length > 0) {
         code += `headers = {\n`;
-        for (const [key, value] of Object.entries(curl.headers)) {
-            code += `    "${key}": "${value}",\n`;
-        }
+        const headerEntries = Object.entries(curl.headers);
+        headerEntries.forEach(([key, value], index) => {
+            // 转义值中的引号
+            const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const comma = index < headerEntries.length - 1 ? ',' : '';
+            code += `    "${key}": "${escapedValue}"${comma}\n`;
+        });
         code += `}\n\n`;
     }
     
     if (Object.keys(curl.cookies).length > 0) {
         code += `cookies = {\n`;
-        for (const [key, value] of Object.entries(curl.cookies)) {
-            code += `    "${key}": "${value}",\n`;
-        }
+        const cookieEntries = Object.entries(curl.cookies);
+        cookieEntries.forEach(([key, value], index) => {
+            const comma = index < cookieEntries.length - 1 ? ',' : '';
+            code += `    "${key}": "${value}"${comma}\n`;
+        });
         code += `}\n\n`;
     }
     
     if (curl.data) {
-        // 尝试解析为JSON
-        try {
-            JSON.parse(curl.data);
-            code += `data = ${curl.data}\n\n`;
-        } catch {
-            code += `data = "${curl.data}"\n\n`;
+        if (curl.isJson) {
+            // 解析JSON并格式化为Python字典
+            try {
+                const jsonObj = JSON.parse(curl.data);
+                code += `data = {\n`;
+                const entries = Object.entries(jsonObj);
+                entries.forEach(([key, value], index) => {
+                    const comma = index < entries.length - 1 ? ',' : '';
+                    if (typeof value === 'string') {
+                        code += `    "${key}": "${value}"${comma}\n`;
+                    } else if (typeof value === 'number') {
+                        code += `    "${key}": ${value}${comma}\n`;
+                    } else if (typeof value === 'boolean') {
+                        code += `    "${key}": ${value}${comma}\n`;
+                    } else if (value === null) {
+                        code += `    "${key}": None${comma}\n`;
+                    } else if (Array.isArray(value)) {
+                        code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                    } else {
+                        code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                    }
+                });
+                code += `}\n\n`;
+                code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+            } catch (e) {
+                // 如果JSON解析失败，作为普通字符串处理
+                const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                code += `data = "${escapedData}"\n\n`;
+            }
+        } else {
+            // 非JSON数据，作为字符串处理
+            const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            code += `data = "${escapedData}"\n\n`;
         }
     }
     
     code += `response = requests.${curl.method.toLowerCase()}(\n`;
-    code += `    url,\n`;
+    code += `    url`;
     if (Object.keys(curl.headers).length > 0) {
-        code += `    headers=headers,\n`;
+        code += `,\n    headers=headers`;
     }
     if (Object.keys(curl.cookies).length > 0) {
-        code += `    cookies=cookies,\n`;
+        code += `,\n    cookies=cookies`;
     }
     if (curl.data) {
-        code += `    data=data,\n`;
+        code += `,\n    data=data`;
     }
-    code += `)\n\n`;
+    code += `\n)\n\n`;
     
     code += `print(response.status_code)\n`;
     code += `print(response.text)\n`;
@@ -1536,48 +1632,83 @@ function generateRequestsCode(curl) {
 
 // 生成httpx代码
 function generateHttpxCode(curl) {
-    let code = `import httpx\n\n`;
+    let code = `import httpx\n`;
+    let needJson = false;
+    
+    if (curl.data && curl.isJson) {
+        code += `import json\n`;
+        needJson = true;
+    }
+    code += `\n`;
     
     code += `url = "${curl.url}"\n\n`;
     
     if (Object.keys(curl.headers).length > 0) {
         code += `headers = {\n`;
-        for (const [key, value] of Object.entries(curl.headers)) {
-            code += `    "${key}": "${value}",\n`;
-        }
+        const headerEntries = Object.entries(curl.headers);
+        headerEntries.forEach(([key, value], index) => {
+            const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const comma = index < headerEntries.length - 1 ? ',' : '';
+            code += `    "${key}": "${escapedValue}"${comma}\n`;
+        });
         code += `}\n\n`;
     }
     
     if (Object.keys(curl.cookies).length > 0) {
         code += `cookies = {\n`;
-        for (const [key, value] of Object.entries(curl.cookies)) {
-            code += `    "${key}": "${value}",\n`;
-        }
+        const cookieEntries = Object.entries(curl.cookies);
+        cookieEntries.forEach(([key, value], index) => {
+            const comma = index < cookieEntries.length - 1 ? ',' : '';
+            code += `    "${key}": "${value}"${comma}\n`;
+        });
         code += `}\n\n`;
     }
     
     if (curl.data) {
-        try {
-            JSON.parse(curl.data);
-            code += `data = ${curl.data}\n\n`;
-        } catch {
-            code += `data = "${curl.data}"\n\n`;
+        if (curl.isJson) {
+            try {
+                const jsonObj = JSON.parse(curl.data);
+                code += `data = {\n`;
+                const entries = Object.entries(jsonObj);
+                entries.forEach(([key, value], index) => {
+                    const comma = index < entries.length - 1 ? ',' : '';
+                    if (typeof value === 'string') {
+                        code += `    "${key}": "${value}"${comma}\n`;
+                    } else if (typeof value === 'number') {
+                        code += `    "${key}": ${value}${comma}\n`;
+                    } else if (typeof value === 'boolean') {
+                        code += `    "${key}": ${value}${comma}\n`;
+                    } else if (value === null) {
+                        code += `    "${key}": None${comma}\n`;
+                    } else {
+                        code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                    }
+                });
+                code += `}\n\n`;
+                code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+            } catch (e) {
+                const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                code += `data = "${escapedData}"\n\n`;
+            }
+        } else {
+            const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            code += `data = "${escapedData}"\n\n`;
         }
     }
     
     code += `with httpx.Client() as client:\n`;
     code += `    response = client.${curl.method.toLowerCase()}(\n`;
-    code += `        url,\n`;
+    code += `        url`;
     if (Object.keys(curl.headers).length > 0) {
-        code += `        headers=headers,\n`;
+        code += `,\n        headers=headers`;
     }
     if (Object.keys(curl.cookies).length > 0) {
-        code += `        cookies=cookies,\n`;
+        code += `,\n        cookies=cookies`;
     }
     if (curl.data) {
-        code += `        data=data,\n`;
+        code += `,\n        data=data`;
     }
-    code += `    )\n\n`;
+    code += `\n    )\n\n`;
     
     code += `    print(response.status_code)\n`;
     code += `    print(response.text)\n`;
@@ -1587,49 +1718,84 @@ function generateHttpxCode(curl) {
 
 // 生成aiohttp代码
 function generateAiohttpCode(curl) {
-    let code = `import aiohttp\nimport asyncio\n\n`;
+    let code = `import aiohttp\nimport asyncio\n`;
+    let needJson = false;
+    
+    if (curl.data && curl.isJson) {
+        code += `import json\n`;
+        needJson = true;
+    }
+    code += `\n`;
     
     code += `async def main():\n`;
     code += `    url = "${curl.url}"\n\n`;
     
     if (Object.keys(curl.headers).length > 0) {
         code += `    headers = {\n`;
-        for (const [key, value] of Object.entries(curl.headers)) {
-            code += `        "${key}": "${value}",\n`;
-        }
+        const headerEntries = Object.entries(curl.headers);
+        headerEntries.forEach(([key, value], index) => {
+            const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const comma = index < headerEntries.length - 1 ? ',' : '';
+            code += `        "${key}": "${escapedValue}"${comma}\n`;
+        });
         code += `    }\n\n`;
     }
     
     if (Object.keys(curl.cookies).length > 0) {
         code += `    cookies = {\n`;
-        for (const [key, value] of Object.entries(curl.cookies)) {
-            code += `        "${key}": "${value}",\n`;
-        }
+        const cookieEntries = Object.entries(curl.cookies);
+        cookieEntries.forEach(([key, value], index) => {
+            const comma = index < cookieEntries.length - 1 ? ',' : '';
+            code += `        "${key}": "${value}"${comma}\n`;
+        });
         code += `    }\n\n`;
     }
     
     if (curl.data) {
-        try {
-            JSON.parse(curl.data);
-            code += `    data = ${curl.data}\n\n`;
-        } catch {
-            code += `    data = "${curl.data}"\n\n`;
+        if (curl.isJson) {
+            try {
+                const jsonObj = JSON.parse(curl.data);
+                code += `    data = {\n`;
+                const entries = Object.entries(jsonObj);
+                entries.forEach(([key, value], index) => {
+                    const comma = index < entries.length - 1 ? ',' : '';
+                    if (typeof value === 'string') {
+                        code += `        "${key}": "${value}"${comma}\n`;
+                    } else if (typeof value === 'number') {
+                        code += `        "${key}": ${value}${comma}\n`;
+                    } else if (typeof value === 'boolean') {
+                        code += `        "${key}": ${value}${comma}\n`;
+                    } else if (value === null) {
+                        code += `        "${key}": None${comma}\n`;
+                    } else {
+                        code += `        "${key}": ${JSON.stringify(value)}${comma}\n`;
+                    }
+                });
+                code += `    }\n\n`;
+                code += `    data = json.dumps(data, separators=(',', ':'))\n\n`;
+            } catch (e) {
+                const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                code += `    data = "${escapedData}"\n\n`;
+            }
+        } else {
+            const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            code += `    data = "${escapedData}"\n\n`;
         }
     }
     
     code += `    async with aiohttp.ClientSession() as session:\n`;
     code += `        async with session.${curl.method.toLowerCase()}(\n`;
-    code += `            url,\n`;
+    code += `            url`;
     if (Object.keys(curl.headers).length > 0) {
-        code += `            headers=headers,\n`;
+        code += `,\n            headers=headers`;
     }
     if (Object.keys(curl.cookies).length > 0) {
-        code += `            cookies=cookies,\n`;
+        code += `,\n            cookies=cookies`;
     }
     if (curl.data) {
-        code += `            data=data,\n`;
+        code += `,\n            data=data`;
     }
-    code += `        ) as response:\n`;
+    code += `\n        ) as response:\n`;
     code += `            print(response.status)\n`;
     code += `            text = await response.text()\n`;
     code += `            print(text)\n\n`;
