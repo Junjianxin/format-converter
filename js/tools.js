@@ -1455,6 +1455,27 @@ function parseCurlCommand(curlStr) {
         result.method = methodMatch[1].toUpperCase();
     }
     
+    // 提取Cookie - 处理 -b 或 --cookie 参数
+    const cookieRegex = /(?:-b|--cookie)\s+(['"])((?:(?!\1).|\\\1)*?)\1/gi;
+    let cookieMatch;
+    while ((cookieMatch = cookieRegex.exec(curlStr)) !== null) {
+        const cookieValue = cookieMatch[2].replace(/\\'/g, "'").replace(/\\"/g, '"');
+        // 解析Cookie字符串，格式为 key1=value1; key2=value2
+        cookieValue.split(';').forEach(c => {
+            const trimmed = c.trim();
+            if (trimmed) {
+                const equalIndex = trimmed.indexOf('=');
+                if (equalIndex > 0) {
+                    const key = trimmed.substring(0, equalIndex).trim();
+                    const value = trimmed.substring(equalIndex + 1).trim();
+                    if (key) {
+                        result.cookies[key] = value || '';
+                    }
+                }
+            }
+        });
+    }
+    
     // 提取Headers - 改进正则以处理嵌套引号
     // 匹配 -H 'key: value' 或 -H "key: value"，正确处理值中的引号
     const headerRegex = /-H\s+(['"])((?:(?!\1).|\\\1)*?)\1/gi;
@@ -1466,10 +1487,17 @@ function parseCurlCommand(curlStr) {
             const key = headerValue.substring(0, colonIndex).trim();
             const value = headerValue.substring(colonIndex + 1).trim();
             if (key.toLowerCase() === 'cookie') {
-                // 解析Cookie
+                // 解析Cookie（如果通过Header传递）
                 value.split(';').forEach(c => {
-                    const [k, v] = c.trim().split('=');
-                    if (k) result.cookies[k] = v || '';
+                    const trimmed = c.trim();
+                    if (trimmed) {
+                        const equalIndex = trimmed.indexOf('=');
+                        if (equalIndex > 0) {
+                            const k = trimmed.substring(0, equalIndex).trim();
+                            const v = trimmed.substring(equalIndex + 1).trim();
+                            if (k) result.cookies[k] = v || '';
+                        }
+                    }
                 });
             } else {
                 result.headers[key] = value;
@@ -1521,14 +1549,42 @@ function parseCurlCommand(curlStr) {
             }
         }
         
-        // 如果提取到数据，检查是否为JSON并设置方法
+        // 如果提取到数据，检查数据格式并设置方法
         if (result.data) {
-            try {
-                JSON.parse(result.data);
-                result.isJson = true;
-            } catch (e) {
+            // 检查 Content-Type 是否为 application/x-www-form-urlencoded
+            const contentTypeEntry = Object.entries(result.headers).find(([k]) => 
+                k.toLowerCase() === 'content-type'
+            );
+            const contentType = contentTypeEntry ? contentTypeEntry[1] : null;
+            
+            const isFormUrlEncoded = contentType && 
+                contentType.toLowerCase().includes('application/x-www-form-urlencoded');
+            
+            if (isFormUrlEncoded) {
+                // 解析为字典格式：key1=value1&key2=value2 -> {key1: value1, key2: value2}
+                result.dataDict = {};
+                result.data.split('&').forEach(pair => {
+                    const equalIndex = pair.indexOf('=');
+                    if (equalIndex > 0) {
+                        const key = decodeURIComponent(pair.substring(0, equalIndex));
+                        const value = decodeURIComponent(pair.substring(equalIndex + 1));
+                        result.dataDict[key] = value;
+                    } else if (pair.trim()) {
+                        // 处理没有值的键
+                        result.dataDict[decodeURIComponent(pair.trim())] = '';
+                    }
+                });
                 result.isJson = false;
+            } else {
+                // 尝试解析为JSON
+                try {
+                    JSON.parse(result.data);
+                    result.isJson = true;
+                } catch (e) {
+                    result.isJson = false;
+                }
             }
+            
             if (result.method === 'GET') {
                 result.method = 'POST';
             }
@@ -1575,7 +1631,17 @@ function generateRequestsCode(curl) {
     }
     
     if (curl.data) {
-        if (curl.isJson) {
+        // 检查是否有 dataDict（form-urlencoded 格式）
+        if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
+            // 使用字典格式
+            code += `data = {\n`;
+            const entries = Object.entries(curl.dataDict);
+            entries.forEach(([key, value], index) => {
+                const comma = index < entries.length - 1 ? ',' : '';
+                code += `    "${key}": "${value}"${comma}\n`;
+            });
+            code += `}\n\n`;
+        } else if (curl.isJson) {
             // 解析JSON并格式化为Python字典
             try {
                 const jsonObj = JSON.parse(curl.data);
@@ -1665,7 +1731,17 @@ function generateHttpxCode(curl) {
     }
     
     if (curl.data) {
-        if (curl.isJson) {
+        // 检查是否有 dataDict（form-urlencoded 格式）
+        if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
+            // 使用字典格式
+            code += `data = {\n`;
+            const entries = Object.entries(curl.dataDict);
+            entries.forEach(([key, value], index) => {
+                const comma = index < entries.length - 1 ? ',' : '';
+                code += `    "${key}": "${value}"${comma}\n`;
+            });
+            code += `}\n\n`;
+        } else if (curl.isJson) {
             try {
                 const jsonObj = JSON.parse(curl.data);
                 code += `data = {\n`;
@@ -1752,7 +1828,17 @@ function generateAiohttpCode(curl) {
     }
     
     if (curl.data) {
-        if (curl.isJson) {
+        // 检查是否有 dataDict（form-urlencoded 格式）
+        if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
+            // 使用字典格式
+            code += `    data = {\n`;
+            const entries = Object.entries(curl.dataDict);
+            entries.forEach(([key, value], index) => {
+                const comma = index < entries.length - 1 ? ',' : '';
+                code += `        "${key}": "${value}"${comma}\n`;
+            });
+            code += `    }\n\n`;
+        } else if (curl.isJson) {
             try {
                 const jsonObj = JSON.parse(curl.data);
                 code += `    data = {\n`;
