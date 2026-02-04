@@ -586,6 +586,116 @@ function handleRsaCrypto(input) {
     }
 }
 
+// 3. SM2/SM3/SM4 国密算法
+function handleSmCrypto(input) {
+    // 检查是否加载了 sm-crypto 库
+    if (typeof smCrypto === 'undefined' && typeof window.smCrypto === 'undefined') {
+        throw new Error('SM加密库未加载，请检查网络连接');
+    }
+    
+    // 兼容不同的库加载方式
+    const sm = typeof smCrypto !== 'undefined' ? smCrypto : window.smCrypto;
+    
+    const type = document.getElementById('smType').value; // SM2, SM3, SM4
+    const mode = document.getElementById('smMode').value; // encrypt, decrypt
+    const keyStr = document.getElementById('smKey').value.trim();
+    const ivStr = document.getElementById('smIv') ? document.getElementById('smIv').value.trim() : '';
+    
+    try {
+        if (type === 'SM3') {
+            // SM3 哈希算法，只有哈希功能
+            if (!input) throw new Error('请输入要哈希的内容');
+            const hash = sm.sm3(input);
+            return hash;
+        } else if (type === 'SM2') {
+            // SM2 椭圆曲线公钥密码算法
+            if (!keyStr) throw new Error('请输入公钥或私钥');
+            
+            if (mode === 'encrypt') {
+                // SM2 加密（使用公钥）
+                if (!input) throw new Error('请输入要加密的内容');
+                try {
+                    // sm-crypto 的 SM2 加密返回的是 16 进制字符串
+                    // cipherMode: 0-C1C2C3, 1-C1C3C2
+                    const encrypted = sm.sm2.doEncrypt(input, keyStr, 1);
+                    return encrypted;
+                } catch (e) {
+                    throw new Error('加密失败，请检查公钥格式是否正确: ' + e.message);
+                }
+            } else {
+                // SM2 解密（使用私钥）
+                if (!input) throw new Error('请输入要解密的密文');
+                try {
+                    // cipherMode: 0-C1C2C3, 1-C1C3C2
+                    const decrypted = sm.sm2.doDecrypt(input, keyStr, 1);
+                    return decrypted;
+                } catch (e) {
+                    throw new Error('解密失败，请检查私钥或密文格式: ' + e.message);
+                }
+            }
+        } else if (type === 'SM4') {
+            // SM4 分组密码算法
+            if (!keyStr) throw new Error('请输入密钥 (Key)');
+            
+            // SM4 密钥长度必须是 16 字节（32 个十六进制字符）
+            // 如果输入的是字符串，需要转换为 hex
+            let keyHex = keyStr;
+            if (keyStr.length === 16) {
+                // 如果是 16 字节的字符串，转换为 hex
+                keyHex = Array.from(keyStr).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+            } else if (keyStr.length !== 32) {
+                throw new Error('SM4 密钥长度必须为 16 字节（32 个十六进制字符）');
+            }
+            
+            // IV 处理（可选，默认使用零向量）
+            let ivHex = '00000000000000000000000000000000';
+            if (ivStr) {
+                if (ivStr.length === 16) {
+                    ivHex = Array.from(ivStr).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+                } else if (ivStr.length === 32) {
+                    ivHex = ivStr;
+                } else {
+                    throw new Error('SM4 IV 长度必须为 16 字节（32 个十六进制字符）');
+                }
+            }
+            
+            if (mode === 'encrypt') {
+                if (!input) throw new Error('请输入要加密的内容');
+                try {
+                    // sm-crypto 的 SM4 加密
+                    // mode: 0-ECB, 1-CBC
+                    const encrypted = sm.sm4.encrypt(input, keyHex, {
+                        mode: 1, // CBC 模式
+                        inputEncoding: 'utf8',
+                        outputEncoding: 'hex',
+                        iv: ivHex
+                    });
+                    return encrypted;
+                } catch (e) {
+                    throw new Error('加密失败: ' + e.message);
+                }
+            } else {
+                if (!input) throw new Error('请输入要解密的密文');
+                try {
+                    // sm-crypto 的 SM4 解密
+                    // mode: 0-ECB, 1-CBC
+                    const decrypted = sm.sm4.decrypt(input, keyHex, {
+                        mode: 1, // CBC 模式
+                        inputEncoding: 'hex',
+                        outputEncoding: 'utf8',
+                        iv: ivHex
+                    });
+                    return decrypted;
+                } catch (e) {
+                    throw new Error('解密失败，请检查密钥或密文格式: ' + e.message);
+                }
+            }
+        }
+    } catch (e) {
+        throw new Error('SM算法操作失败: ' + e.message);
+    }
+}
+
 
 // ========== 爬虫逆向新增工具函数 ==========
 
