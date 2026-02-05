@@ -521,34 +521,56 @@ function updateToolOptions() {
             elements.toolOptions.innerHTML = `
                 <div style="display:flex; gap:5px; flex-wrap:wrap; align-items:center;">
                     <select id="smType" style="padding:4px;">
-                        <option value="SM2">SM2 (椭圆曲线公钥)</option>
                         <option value="SM3">SM3 (密码杂凑)</option>
                         <option value="SM4">SM4 (分组密码)</option>
+                        <option value="SM2">SM2 (椭圆曲线公钥)</option>
                     </select>
                     <select id="smMode" style="padding:4px; font-weight:bold;">
-                        <option value="encrypt">加密/签名</option>
-                        <option value="decrypt">解密/验证</option>
+                        <option value="encrypt">哈希计算</option>
                     </select>
-                    <input type="text" id="smKey" placeholder="密钥/公钥"
-                           style="width:120px; padding:4px; border:1px solid var(--border-color); border-radius:4px;">
-                    <input type="text" id="smIv" placeholder="IV(仅SM4)"
-                           style="width:80px; padding:4px; border:1px solid var(--border-color); border-radius:4px; display:none;">
+                    <input type="text" id="smKey" placeholder="密钥(16字节或32位hex)"
+                           style="width:160px; padding:4px; border:1px solid var(--border-color); border-radius:4px; display:none;">
+                    <input type="text" id="smIv" placeholder="IV(16字节或32位hex)"
+                           style="width:160px; padding:4px; border:1px solid var(--border-color); border-radius:4px; display:none;">
+                    <button id="smGenKey" class="option-btn" style="display:none;">生成密钥对</button>
                 </div>
             `;
             
             // 监听算法变化，SM2/SM3 不需要 IV
             document.getElementById('smType').addEventListener('change', (e) => {
-                const isSm4 = e.target.value === 'SM4';
-                document.getElementById('smIv').style.display = isSm4 ? 'inline-block' : 'none';
+                const smType = e.target.value;
                 const smMode = document.getElementById('smMode');
-                if (e.target.value === 'SM3') {
+                const smKey = document.getElementById('smKey');
+                const smIv = document.getElementById('smIv');
+                const smGenKey = document.getElementById('smGenKey');
+                
+                if (smType === 'SM3') {
                     // SM3 只有哈希功能
                     smMode.innerHTML = '<option value="encrypt">哈希计算</option>';
-                } else {
+                    smKey.style.display = 'none';
+                    smIv.style.display = 'none';
+                    smGenKey.style.display = 'none';
+                } else if (smType === 'SM2') {
+                    // SM2 需要公钥/私钥
                     smMode.innerHTML = `
-                        <option value="encrypt">加密/签名</option>
-                        <option value="decrypt">解密/验证</option>
+                        <option value="encrypt">加密</option>
+                        <option value="decrypt">解密</option>
+                        <option value="genkey">生成密钥对</option>
                     `;
+                    smKey.placeholder = '公钥/私钥(64位hex)';
+                    smKey.style.display = 'inline-block';
+                    smIv.style.display = 'none';
+                    smGenKey.style.display = 'none';
+                } else if (smType === 'SM4') {
+                    // SM4 需要密钥和IV
+                    smMode.innerHTML = `
+                        <option value="encrypt">加密</option>
+                        <option value="decrypt">解密</option>
+                    `;
+                    smKey.placeholder = '密钥(16字节或32位hex)';
+                    smKey.style.display = 'inline-block';
+                    smIv.style.display = 'inline-block';
+                    smGenKey.style.display = 'none';
                 }
             });
             break;
@@ -798,6 +820,7 @@ function updatePlaceholder() {
         'jwt': '请输入 eyJ... 开头的 JWT Token...',
         'symmetric': '输入待加密的文本 或 待解密的密文 (Base64格式)...',
         'rsa': '输入待处理的内容...',
+        'sm': '输入待处理的内容...\n\nSM3示例: 任意文本\nSM4示例: Hello World (加密) 或 hex密文 (解密)\nSM2示例: 明文 (加密) 或 hex密文 (解密)',
         // 爬虫逆向新增工具
         'hex': '请输入字符串或Hex值...\n示例: Hello 或 48656c6c6f',
         'cookie': '请输入Cookie字符串...\n示例: name=value; session=abc123; token=xyz',
