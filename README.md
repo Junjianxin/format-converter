@@ -32,7 +32,7 @@
 | **SHA/HMAC哈希** | SHA-1/256/384/512散列，支持HMAC签名 |
 | **AES/DES加密** | 对称加密，支持AES/DES/RC4，CBC/ECB模式 |
 | **RSA非对称** | RSA公钥加密/私钥解密，支持密钥对生成 |
-| **SM2/3/4** | SM2/3/4加解密 |
+| **SM2/SM3/SM4** | 国密算法：SM2椭圆曲线公钥、SM3哈希、SM4对称加密 |
 
 ### 🎨 格式化工具 (4个)
 
@@ -160,6 +160,7 @@ format-converter/
 - **前端**: 原生 HTML5 + CSS3 + JavaScript (ES6+)
 - **加密库**: [CryptoJS](https://github.com/brix/crypto-js) - AES/DES/SHA等加密算法
 - **RSA库**: [JSEncrypt](https://github.com/travist/jsencrypt) - RSA加解密
+- **国密库**: SM2/SM3/SM4 - 中国商用密码算法
 - **无框架依赖**: 不依赖Vue/React等框架，轻量快速
 
 ## 📝 更新日志
