@@ -1751,6 +1751,13 @@ function generateRequestsCode(curl) {
         code += `}\n\n`;
     }
     
+    // 判断是否使用json参数
+    const contentTypeEntry = Object.entries(curl.headers).find(([k]) => 
+        k.toLowerCase() === 'content-type'
+    );
+    const contentType = contentTypeEntry ? contentTypeEntry[1] : '';
+    const isJsonContentType = contentType.toLowerCase().includes('application/json');
+    
     if (curl.data) {
         // 检查是否有 dataDict（form-urlencoded 格式）
         if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
@@ -1763,38 +1770,72 @@ function generateRequestsCode(curl) {
             });
             code += `}\n\n`;
         } else if (curl.isJson) {
-            // 解析JSON并格式化为Python字典
+            // 数据本身是JSON对象
             try {
                 const jsonObj = JSON.parse(curl.data);
-                code += `data = {\n`;
-                const entries = Object.entries(jsonObj);
-                entries.forEach(([key, value], index) => {
-                    const comma = index < entries.length - 1 ? ',' : '';
-                    if (typeof value === 'string') {
-                        code += `    "${key}": "${value}"${comma}\n`;
-                    } else if (typeof value === 'number') {
-                        code += `    "${key}": ${value}${comma}\n`;
-                    } else if (typeof value === 'boolean') {
-                        code += `    "${key}": ${value}${comma}\n`;
-                    } else if (value === null) {
-                        code += `    "${key}": None${comma}\n`;
-                    } else if (Array.isArray(value)) {
-                        code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
-                    } else {
-                        code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
-                    }
-                });
-                code += `}\n\n`;
-                code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+                // 如果Content-Type是application/json，使用json参数
+                if (isJsonContentType) {
+                    code += `json_data = {\n`;
+                    const entries = Object.entries(jsonObj);
+                    entries.forEach(([key, value], index) => {
+                        const comma = index < entries.length - 1 ? ',' : '';
+                        if (typeof value === 'string') {
+                            const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                            code += `    "${key}": "${escapedValue}"${comma}\n`;
+                        } else if (typeof value === 'number') {
+                            code += `    "${key}": ${value}${comma}\n`;
+                        } else if (typeof value === 'boolean') {
+                            code += `    "${key}": ${value ? 'True' : 'False'}${comma}\n`;
+                        } else if (value === null) {
+                            code += `    "${key}": None${comma}\n`;
+                        } else if (Array.isArray(value)) {
+                            code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                        } else {
+                            code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                        }
+                    });
+                    code += `}\n\n`;
+                } else {
+                    code += `data = {\n`;
+                    const entries = Object.entries(jsonObj);
+                    entries.forEach(([key, value], index) => {
+                        const comma = index < entries.length - 1 ? ',' : '';
+                        if (typeof value === 'string') {
+                            const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                            code += `    "${key}": "${escapedValue}"${comma}\n`;
+                        } else if (typeof value === 'number') {
+                            code += `    "${key}": ${value}${comma}\n`;
+                        } else if (typeof value === 'boolean') {
+                            code += `    "${key}": ${value ? 'True' : 'False'}${comma}\n`;
+                        } else if (value === null) {
+                            code += `    "${key}": None${comma}\n`;
+                        } else if (Array.isArray(value)) {
+                            code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                        } else {
+                            code += `    "${key}": ${JSON.stringify(value)}${comma}\n`;
+                        }
+                    });
+                    code += `}\n\n`;
+                    code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+                }
             } catch (e) {
                 // 如果JSON解析失败，作为普通字符串处理
                 const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                code += `data = "${escapedData}"\n\n`;
+                if (isJsonContentType) {
+                    code += `json_data = "${escapedData}"\n\n`;
+                } else {
+                    code += `data = "${escapedData}"\n\n`;
+                }
             }
         } else {
             // 非JSON数据，作为字符串处理
             const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            code += `data = "${escapedData}"\n\n`;
+            if (isJsonContentType) {
+                // Content-Type是application/json，使用json参数
+                code += `json_data = "${escapedData}"\n\n`;
+            } else {
+                code += `data = "${escapedData}"\n\n`;
+            }
         }
     }
     
@@ -1807,7 +1848,12 @@ function generateRequestsCode(curl) {
         code += `,\n    cookies=cookies`;
     }
     if (curl.data) {
-        code += `,\n    data=data`;
+        // 根据是否有json_data来决定使用哪个参数
+        if (isJsonContentType && !curl.dataDict) {
+            code += `,\n    json=json_data`;
+        } else {
+            code += `,\n    data=data`;
+        }
     }
     code += `\n)\n\n`;
     
@@ -1851,6 +1897,13 @@ function generateHttpxCode(curl) {
         code += `}\n\n`;
     }
     
+    // 判断是否使用json参数
+    const contentTypeEntry = Object.entries(curl.headers).find(([k]) => 
+        k.toLowerCase() === 'content-type'
+    );
+    const contentType = contentTypeEntry ? contentTypeEntry[1] : '';
+    const isJsonContentType = contentType.toLowerCase().includes('application/json');
+    
     if (curl.data) {
         // 检查是否有 dataDict（form-urlencoded 格式）
         if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
@@ -1865,16 +1918,21 @@ function generateHttpxCode(curl) {
         } else if (curl.isJson) {
             try {
                 const jsonObj = JSON.parse(curl.data);
-                code += `data = {\n`;
+                if (isJsonContentType) {
+                    code += `json_data = {\n`;
+                } else {
+                    code += `data = {\n`;
+                }
                 const entries = Object.entries(jsonObj);
                 entries.forEach(([key, value], index) => {
                     const comma = index < entries.length - 1 ? ',' : '';
                     if (typeof value === 'string') {
-                        code += `    "${key}": "${value}"${comma}\n`;
+                        const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                        code += `    "${key}": "${escapedValue}"${comma}\n`;
                     } else if (typeof value === 'number') {
                         code += `    "${key}": ${value}${comma}\n`;
                     } else if (typeof value === 'boolean') {
-                        code += `    "${key}": ${value}${comma}\n`;
+                        code += `    "${key}": ${value ? 'True' : 'False'}${comma}\n`;
                     } else if (value === null) {
                         code += `    "${key}": None${comma}\n`;
                     } else {
@@ -1882,14 +1940,24 @@ function generateHttpxCode(curl) {
                     }
                 });
                 code += `}\n\n`;
-                code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+                if (!isJsonContentType) {
+                    code += `data = json.dumps(data, separators=(',', ':'))\n\n`;
+                }
             } catch (e) {
                 const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                code += `data = "${escapedData}"\n\n`;
+                if (isJsonContentType) {
+                    code += `json_data = "${escapedData}"\n\n`;
+                } else {
+                    code += `data = "${escapedData}"\n\n`;
+                }
             }
         } else {
             const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            code += `data = "${escapedData}"\n\n`;
+            if (isJsonContentType) {
+                code += `json_data = "${escapedData}"\n\n`;
+            } else {
+                code += `data = "${escapedData}"\n\n`;
+            }
         }
     }
     
@@ -1903,7 +1971,11 @@ function generateHttpxCode(curl) {
         code += `,\n        cookies=cookies`;
     }
     if (curl.data) {
-        code += `,\n        data=data`;
+        if (isJsonContentType && !curl.dataDict) {
+            code += `,\n        json=json_data`;
+        } else {
+            code += `,\n        data=data`;
+        }
     }
     code += `\n    )\n\n`;
     
@@ -1948,6 +2020,13 @@ function generateAiohttpCode(curl) {
         code += `    }\n\n`;
     }
     
+    // 判断是否使用json参数
+    const contentTypeEntry = Object.entries(curl.headers).find(([k]) => 
+        k.toLowerCase() === 'content-type'
+    );
+    const contentType = contentTypeEntry ? contentTypeEntry[1] : '';
+    const isJsonContentType = contentType.toLowerCase().includes('application/json');
+    
     if (curl.data) {
         // 检查是否有 dataDict（form-urlencoded 格式）
         if (curl.dataDict && Object.keys(curl.dataDict).length > 0) {
@@ -1962,16 +2041,21 @@ function generateAiohttpCode(curl) {
         } else if (curl.isJson) {
             try {
                 const jsonObj = JSON.parse(curl.data);
-                code += `    data = {\n`;
+                if (isJsonContentType) {
+                    code += `    json_data = {\n`;
+                } else {
+                    code += `    data = {\n`;
+                }
                 const entries = Object.entries(jsonObj);
                 entries.forEach(([key, value], index) => {
                     const comma = index < entries.length - 1 ? ',' : '';
                     if (typeof value === 'string') {
-                        code += `        "${key}": "${value}"${comma}\n`;
+                        const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                        code += `        "${key}": "${escapedValue}"${comma}\n`;
                     } else if (typeof value === 'number') {
                         code += `        "${key}": ${value}${comma}\n`;
                     } else if (typeof value === 'boolean') {
-                        code += `        "${key}": ${value}${comma}\n`;
+                        code += `        "${key}": ${value ? 'True' : 'False'}${comma}\n`;
                     } else if (value === null) {
                         code += `        "${key}": None${comma}\n`;
                     } else {
@@ -1979,14 +2063,24 @@ function generateAiohttpCode(curl) {
                     }
                 });
                 code += `    }\n\n`;
-                code += `    data = json.dumps(data, separators=(',', ':'))\n\n`;
+                if (!isJsonContentType) {
+                    code += `    data = json.dumps(data, separators=(',', ':'))\n\n`;
+                }
             } catch (e) {
                 const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                code += `    data = "${escapedData}"\n\n`;
+                if (isJsonContentType) {
+                    code += `    json_data = "${escapedData}"\n\n`;
+                } else {
+                    code += `    data = "${escapedData}"\n\n`;
+                }
             }
         } else {
             const escapedData = curl.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            code += `    data = "${escapedData}"\n\n`;
+            if (isJsonContentType) {
+                code += `    json_data = "${escapedData}"\n\n`;
+            } else {
+                code += `    data = "${escapedData}"\n\n`;
+            }
         }
     }
     
@@ -2000,7 +2094,11 @@ function generateAiohttpCode(curl) {
         code += `,\n            cookies=cookies`;
     }
     if (curl.data) {
-        code += `,\n            data=data`;
+        if (isJsonContentType && !curl.dataDict) {
+            code += `,\n            json=json_data`;
+        } else {
+            code += `,\n            data=data`;
+        }
     }
     code += `\n        ) as response:\n`;
     code += `            print(response.status)\n`;
