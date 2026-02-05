@@ -588,36 +588,46 @@ function handleRsaCrypto(input) {
 
 // 3. SM2/SM3/SM4 国密算法
 function handleSmCrypto(input) {
-    // 检查是否加载了 sm-crypto 库
-    if (typeof smCrypto === 'undefined' && typeof window.smCrypto === 'undefined') {
-        throw new Error('SM加密库未加载，请检查网络连接');
-    }
-    
-    // 兼容不同的库加载方式
-    const sm = typeof smCrypto !== 'undefined' ? smCrypto : window.smCrypto;
-    
     const type = document.getElementById('smType').value; // SM2, SM3, SM4
-    const mode = document.getElementById('smMode').value; // encrypt, decrypt
+    const mode = document.getElementById('smMode').value; // encrypt, decrypt, genkey
     const keyStr = document.getElementById('smKey').value.trim();
     const ivStr = document.getElementById('smIv') ? document.getElementById('smIv').value.trim() : '';
     
     try {
+        if (type === 'SM2' && mode === 'genkey') {
+            // SM2 生成密钥对
+            if (typeof sm2 === 'undefined') {
+                throw new Error('SM2库未加载，请刷新页面重试');
+            }
+            try {
+                const keypair = sm2.generateKeyPairHex();
+                return `公钥 (Public Key):\n${keypair.publicKey}\n\n私钥 (Private Key):\n${keypair.privateKey}\n\n说明：\n- 公钥用于加密，可以公开\n- 私钥用于解密，必须严格保密\n- 请妥善保存密钥对`;
+            } catch (e) {
+                throw new Error('密钥对生成失败: ' + e.message);
+            }
+        }
+        
         if (type === 'SM3') {
             // SM3 哈希算法，只有哈希功能
+            if (typeof sm3 === 'undefined') {
+                throw new Error('SM3库未加载，请刷新页面重试');
+            }
             if (!input) throw new Error('请输入要哈希的内容');
-            const hash = sm.sm3(input);
+            const hash = sm3(input);
             return hash;
         } else if (type === 'SM2') {
             // SM2 椭圆曲线公钥密码算法
+            if (typeof sm2 === 'undefined') {
+                throw new Error('SM2库未加载，请刷新页面重试');
+            }
             if (!keyStr) throw new Error('请输入公钥或私钥');
             
             if (mode === 'encrypt') {
                 // SM2 加密（使用公钥）
                 if (!input) throw new Error('请输入要加密的内容');
                 try {
-                    // sm-crypto 的 SM2 加密返回的是 16 进制字符串
-                    // cipherMode: 0-C1C2C3, 1-C1C3C2
-                    const encrypted = sm.sm2.doEncrypt(input, keyStr, 1);
+                    // cipherMode: 1 表示 C1C3C2 模式
+                    const encrypted = sm2.doEncrypt(input, keyStr, 1);
                     return encrypted;
                 } catch (e) {
                     throw new Error('加密失败，请检查公钥格式是否正确: ' + e.message);
@@ -626,8 +636,8 @@ function handleSmCrypto(input) {
                 // SM2 解密（使用私钥）
                 if (!input) throw new Error('请输入要解密的密文');
                 try {
-                    // cipherMode: 0-C1C2C3, 1-C1C3C2
-                    const decrypted = sm.sm2.doDecrypt(input, keyStr, 1);
+                    // cipherMode: 1 表示 C1C3C2 模式
+                    const decrypted = sm2.doDecrypt(input, keyStr, 1);
                     return decrypted;
                 } catch (e) {
                     throw new Error('解密失败，请检查私钥或密文格式: ' + e.message);
@@ -635,40 +645,42 @@ function handleSmCrypto(input) {
             }
         } else if (type === 'SM4') {
             // SM4 分组密码算法
+            if (typeof sm4 === 'undefined') {
+                throw new Error('SM4库未加载，请刷新页面重试');
+            }
             if (!keyStr) throw new Error('请输入密钥 (Key)');
             
             // SM4 密钥长度必须是 16 字节（32 个十六进制字符）
             // 如果输入的是字符串，需要转换为 hex
             let keyHex = keyStr;
-            if (keyStr.length === 16) {
-                // 如果是 16 字节的字符串，转换为 hex
+            if (keyStr.length === 16 && !/^[0-9a-fA-F]+$/.test(keyStr)) {
+                // 如果是 16 字节的字符串（非十六进制），转换为 hex
                 keyHex = Array.from(keyStr).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-            } else if (keyStr.length !== 32) {
-                throw new Error('SM4 密钥长度必须为 16 字节（32 个十六进制字符）');
+            } else if (keyStr.length !== 32 || !/^[0-9a-fA-F]+$/.test(keyStr)) {
+                throw new Error('SM4 密钥必须为 16 字节的字符串或 32 位十六进制字符串');
             }
             
             // IV 处理（可选，默认使用零向量）
             let ivHex = '00000000000000000000000000000000';
             if (ivStr) {
-                if (ivStr.length === 16) {
+                if (ivStr.length === 16 && !/^[0-9a-fA-F]+$/.test(ivStr)) {
                     ivHex = Array.from(ivStr).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-                } else if (ivStr.length === 32) {
+                } else if (ivStr.length === 32 && /^[0-9a-fA-F]+$/.test(ivStr)) {
                     ivHex = ivStr;
                 } else {
-                    throw new Error('SM4 IV 长度必须为 16 字节（32 个十六进制字符）');
+                    throw new Error('SM4 IV 必须为 16 字节的字符串或 32 位十六进制字符串');
                 }
             }
             
             if (mode === 'encrypt') {
                 if (!input) throw new Error('请输入要加密的内容');
                 try {
-                    // sm-crypto 的 SM4 加密
-                    // mode: 0-ECB, 1-CBC
-                    const encrypted = sm.sm4.encrypt(input, keyHex, {
-                        mode: 1, // CBC 模式
-                        inputEncoding: 'utf8',
-                        outputEncoding: 'hex',
-                        iv: ivHex
+                    // SM4 加密，使用 CBC 模式
+                    const encrypted = sm4.encrypt(input, keyHex, {
+                        mode: 'cbc',
+                        iv: ivHex,
+                        padding: 'pkcs#5',
+                        output: 'string'
                     });
                     return encrypted;
                 } catch (e) {
@@ -677,13 +689,12 @@ function handleSmCrypto(input) {
             } else {
                 if (!input) throw new Error('请输入要解密的密文');
                 try {
-                    // sm-crypto 的 SM4 解密
-                    // mode: 0-ECB, 1-CBC
-                    const decrypted = sm.sm4.decrypt(input, keyHex, {
-                        mode: 1, // CBC 模式
-                        inputEncoding: 'hex',
-                        outputEncoding: 'utf8',
-                        iv: ivHex
+                    // SM4 解密，使用 CBC 模式
+                    const decrypted = sm4.decrypt(input, keyHex, {
+                        mode: 'cbc',
+                        iv: ivHex,
+                        padding: 'pkcs#5',
+                        output: 'string'
                     });
                     return decrypted;
                 } catch (e) {
